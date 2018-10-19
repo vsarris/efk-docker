@@ -1,0 +1,61 @@
+version: "3"
+volumes:
+  esdata:
+    driver: local
+services:
+  fluentd:
+    build: ./fluentd
+    volumes:
+      - ./fluentd/conf:/fluentd/etc
+    links:
+      - "elasticsearch"
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    depends_on:
+    - elasticsearch
+    logging:
+        driver: "json-file"
+        options:
+            max-size: 100m
+            max-file: "5"
+
+  elasticsearch:
+    hostname: elasticsearch
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:6.4.2
+    ports:
+    - "9200:9200"
+    - "9300:9300"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    environment:
+      #bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xms750m -Xmx750m"
+      #discovery.zen.minimum_master_nodes: 1
+      cluster.name: "docker-cluster"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+  kibana:
+    hostname: kibana
+    image: docker.elastic.co/kibana/kibana-oss:6.4.2
+    ports:
+    - '5601:5601'
+    links:
+    - elasticsearch
+    volumes:
+    - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
+
+  web:
+    image: httpd:2.4-alpine
+    ports:
+      - "80:80"
+    depends_on:
+      - fluentd
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: localhost:24224
+        tag: httpd.access
+
